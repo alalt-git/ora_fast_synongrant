@@ -1,0 +1,66 @@
+declare
+
+vERR  varchar2(4000);
+vORAUSER varchar2(100):='TIHAA';
+
+begin
+
+dbms_output.enable;
+
+if vORAUSER is not null then
+  begin
+    select u.username
+    into   vERR
+    from   all_users  u
+    where lower(u.username) = lower(vORAUSER);
+    exception
+      when NO_DATA_FOUND then
+        raise_application_error(-20999,'NDF in all_users where vORAUSER =  '||vORAUSER);
+      when OTHERS then
+        raise_application_error(-20999,'OTHERS where vORAUSER =  '||vORAUSER||chr(10)||SQLERRM);
+  end;
+end if;
+
+
+
+for c in (
+select 'create public synonym '||o.OBJECT_NAME||' for '||o.OBJECT_NAME as syn,
+       case
+         when o.OBJECT_TYPE in ('TABLE','VIEW','SEQUENCE') 
+           then 'grant select on '||o.OBJECT_NAME||' to '||nvl(vORAUSER,' public')
+         when o.OBJECT_TYPE in ('PROCEDURE','PACKAGE','PACKAGE BODY','FUNCTION','SEQUENCE')
+           then 'grant execute on '||o.OBJECT_NAME||' to '||nvl(vORAUSER,' public')
+       end as exect,
+       o.OBJECT_NAME,
+       o.OBJECT_TYPE
+from   all_objects  o
+where  1            = 1
+and   (
+      regexp_count(lower(o.OBJECT_NAME),'mcrd') > 0
+    or
+      regexp_count(lower(o.OBJECT_NAME),'bismon') > 0
+      )
+)
+loop
+  if c.exect is not null then
+    vERR := null;
+    begin
+      execute immediate(c.syn);
+      exception
+        when OTHERS then vERR := SQLERRM;
+         if regexp_count(vERR,'00955') > 0  then
+           dbms_output.put_line(chr(10)||c.object_name||' synonym already');
+         else 
+           dbms_output.put_line(chr(10)||'ERROR synonym = '||c.syn||chr(10)||' =>>>>'||vERR);
+         end if;
+    end;
+    
+    begin
+      execute immediate(c.exect);
+      exception
+        when OTHERS then dbms_output.put_line(chr(10)||'ERROR GRANT = '||c.exect||chr(10)||' =>>>>'||sqlerrm);
+    end;
+  end if;
+end loop;
+
+end;
